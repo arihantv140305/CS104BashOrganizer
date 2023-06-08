@@ -67,17 +67,28 @@ get_available_filename(){
   local ext=$3
   let num=1
   local name=`basename $file`
-  extension=${name##*.}
-  name="${name%.*}" # Remove extension
-  name_check=$name
 
-  # Loop until a unique file name is found
-  while [ -f $dest"/"$ext"/"$name_check"."$extension ]; do
-    name_check="${name}_$num" # Append increment number
-    let num=$num+1
-  done
+  if [[ ! "$name" == *.* ]]; then
+    name_check=$name
+    while [ -f $dest"/"$ext"/"$name_check ]; do
+      name_check="${name}_$num" # Append increment number
+      let num=$num+1
+    done
+    echo $name_check   
+  else
+    extension=${name##*.}
+    name="${name%.*}" # Remove extension
+    name_check=$name
+
+    # Loop until a unique file name is found
+    while [ -f $dest"/"$ext"/"$name_check"."$extension ]; do
+      name_check="${name}_$num" # Append increment number
+      let num=$num+1
+    done
+    
+    echo $name_check"."$extension
+  fi
   
-  echo $name_check"."$extension
 }
 
 # Function to print progress bar
@@ -125,6 +136,7 @@ echo > test | grep '[^ ]' > output
 cat output > extensions.txt
 cat output > moved_files.txt
 cat output > added_folders.txt
+cat output > all_files.txt
 rm test output
 #trap handle_error ERR
 #help function
@@ -221,6 +233,9 @@ while getopts ":s:l:e:i:f:dp" opt; do
       fi
       create_logfile="true"
       log_file=$OPTARG
+      if [ -f $log_file  ]; then
+        rm $log_file
+      fi
       ;;
     e)
       if [[ "$enable_include" = "true" ]]; then
@@ -282,10 +297,13 @@ fi
 for file in $(find "$src" -type f -name "*.zip"); do
   # Unzip the files
   echo -e "${GREEN}Unzipping `basename $file` ${CYAN}"
-  unzip -q "$file" -d "$src/unzipped_files"
+  unzip -q -o "$file" -d "$src/unzipped_files"
 done
 
-total_files=$(find "$src" -type f -not -path '*/\.*' | wc -l)
+find $src -type f | sed -n '/\/[^./]\+\.[^./]\+$/p' >> all_files.txt
+find $src -type f | sed -n '/\/[^./]\+$/p' >> all_files.txt
+
+total_files=$(wc -l < "all_files.txt")
 start_time=$(date +%s)
 current_file=0
 echo
@@ -295,7 +313,7 @@ sleep 0.5
 
 #first I took file from the source then piped it to the sed command 
 #to get the files which have an extension                                  
-for file in $(find "$src" -type f -not -path '*/\.*')
+for file in `cat "all_files.txt"`
 
 do
   #check whether the user wants a progress bar or not
@@ -353,9 +371,6 @@ do
 
     #creating the logfile
     if [ $create_logfile = "true" ]; then
-      if [ -f $log_file  ]; then
-        rm $log_file
-      fi
       echo "`get_available_filename $file $dest $ext` moved from $src to $dest/$ext" >> $log_file
     fi
 
@@ -373,18 +388,18 @@ done
 echo -e "${NC}"
 echo 
 
-cat extensions.txt|sort|uniq > extensions.txt   #created a file containing all the extensions
-cat added_folders.txt|sort|uniq > added_folders.txt
+cat extensions.txt|sort|uniq > extensions1.txt   #created a file containing all the extensions
+cat added_folders.txt|sort|uniq > added_folders1.txt
 #time to print the Summary and other user friendly messages
 sleep 0.5
 echo -e "${RED}--------------------------SUMMARY------------------------------${NC}"
 sleep 0.5
-echo -e "${CYAN}Folders Created${NC}: ${YELLOW}"`wc -l added_folders.txt|awk '{print $1}'`"${NC}"
+echo -e "${CYAN}Folders Created${NC}: ${YELLOW}"`wc -l added_folders1.txt|awk '{print $1}'`"${NC}"
 sleep 0.5
 echo -e "${CYAN}Files Transferred${NC}: ${YELLOW}"`wc -l moved_files.txt|awk '{print $1}'`"${NC}"
 sleep 0.5
 echo -e "${CYAN}File Count in the Created Folders:${NC}"
-for folder in $(cat extensions.txt)
+for folder in $(cat extensions1.txt)
 do
   count=$(ls "$dest/$folder" | wc -l)
   echo -e -n "${YELLOW}"
@@ -419,7 +434,7 @@ if [ $delete = "true" ]; then
   sleep 0.5
 fi
 echo
-rm moved_files.txt added_folders.txt extensions.txt
+rm moved_files.txt added_folders.txt extensions.txt all_files.txt extensions1.txt added_folders1.txt
 echo -e "${RED}Removing temporary folder for unzipping Zipped files${NC}"
 sleep 0.5
 rm -r "$src/unzipped_files"
