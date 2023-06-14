@@ -12,13 +12,13 @@ show_help() {
   echo -e "${YELLOW}Usage: bash organizer.sh [srcdir] [destdir] [options]"
   echo "Options:"
   echo "  --help              Display this help message"
-  echo "  -s [type]           Sort files based on 'ext' for extension or 'date' for creation date${NC}"
+  echo "  -s [type]           Sort files based on 'ext' for extension or 'date' for creation date${NC},"
   echo "  -d                  Delete the files from the destination"
   echo "  -l [log_file]       The name of the lof file is required"
   echo "  -p                  Disable the progress bar"
   echo "  -e [ext1,ext2,...]  Exclude file types or directories from being organized.Arguments should be comma separated."
   echo "  -i [ext1,ext2,...]  Include file types or directories from being organized.Arguments should be comma separated."
-  echo "                      Both include and exclude cannot be used together"
+  echo "                      Both include and exclude cannot be used together. Use the no_extension tag for handling files without extension"
   echo "  -f [max_size]       Sets the upperlimit for the size if the files to copy, the max size should be given in this format: <integer>[B|KB|MB|GB]"
   echo -e "$NC"
   exit 1
@@ -90,7 +90,7 @@ get_available_filename(){
   fi
   
 }
-
+let check_time=$((2**63 - 1))
 # Function to print progress bar
 print_progress() {
   local width=50  # Width of the progress bar
@@ -102,14 +102,16 @@ print_progress() {
 
   # Calculate elapsed time
   local elapsed_time=$(($(date +%s) - start_time))
-  
   # Calculate estimated time of completion
   if [ $progress -ne 0 ]; then
     local total_time=$((elapsed_time * 100 / progress))
     local remaining_time=$((total_time - elapsed_time))
-
-    echo -ne "${RED}Progress: [$bar$space] $progress% |${CYAN} Estimated Time: $remaining_time seconds remaining\r${NC}"
-
+    #echo "$remaining_time $check_time"
+    echo -n
+    if [ $remaining_time -le $check_time ]; then 
+    	echo -ne "${RED}Progress: [$bar$space] $progress% |${CYAN} Estimated Time: $remaining_time seconds remaining\r${NC}"
+   		check_time=$remaining_time 
+    fi
   fi
 }
 
@@ -336,7 +338,11 @@ do
   if [ $enable_exclude = "true" ]; then
     for f in "${exclude_list[@]}"
     do
-      if [ $f = ${name##*.} ]; then
+      if [ $f = "no_extension" ]; then
+        if [[ ! "$name" == *.* ]]; then
+          copy_files="false"
+        fi
+      elif [ $f = ${name##*.} ]; then
         copy_files="false"
       fi
     done
@@ -346,7 +352,11 @@ do
     copy_files="false"
     for f in "${include_list[@]}"
     do
-      if [ $f = ${name##*.} ]; then
+      if [ $f = "no_extension" ]; then
+        if [[ ! "$name" == *.* ]]; then
+          copy_files="true"
+        fi
+      elif [ $f = ${name##*.} ]; then
         copy_files="true"
       fi
     done
